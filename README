@@ -1,0 +1,5 @@
+top_gen11.m is the genetic algorithm that generates a topology.
+example1.m runs the generator with example parameters.
+
+
+chromcost5.m and chromcost7.m are used for evaluating the cost of a topology for given values of k0,k1,k2,k4. They use all_shortest_paths from matlab_bgl, http://dgleich.github.com/matlab-bgl/
