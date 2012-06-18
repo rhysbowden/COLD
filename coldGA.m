@@ -1,12 +1,27 @@
 function topology = coldGA(parameters)
 % coldGA:
 % Runs a genetic algorithm to create a model of an Internet topology
-% See below for explanation of parameters.
 % Rhys Bowden Sep 2009
-% version 11 - first github version
-% Feb 2011
+% version 11 - first github version Feb 2011
 % requires matlab_bgl package for all_shortest_paths
 % http://dgleich.github.com/matlab-bgl/
+%
+% topology = coldGA(parameters)
+% 
+% input:
+% parameters, a struct. see below for explanation of each field.
+%
+% output:
+% topology, a struct with fields:
+%   topology.adjacency  the adjacency matrix of the output topology.
+%                       adjacency(i,j) = 1 iff there is a link from node i
+%                       to node j.
+%   topology.node_distances. node_distances(i,j) = the distance between node i and
+%                       node j.
+%   topology.demand     matrix of the traffic demand between each pair of
+%                       nodes
+%   topology.version    version of the generator used to generate this
+%                       topology.
 
 display(' --- topology generator 11 ---');
 topology = struct();

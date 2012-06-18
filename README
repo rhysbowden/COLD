@@ -1,5 +1,13 @@
-top_gen11.m is the genetic algorithm that generates a topology.
-example1.m runs the generator with example parameters.
+Before you can use coldGA, you must install matlab_bgl: http://dgleich.github.com/matlab-bgl/ 
+(place it in your matlab path)
 
+--- Primary Files ----
+coldGA.m is the genetic algorithm that generates a PoP-level topology.
+pops_to_routers.m takes a PoP-level topology and a set of rules, and generates a router level topology using generalised graph products.
 
+--- Examples ----
+GAexample1.m runs the PoP-level generator with example parameters.
+pops_to_routers_example.m runs PoPs_to_routers with the simplest choices of parameters to generate a router level topology.
+
+--- Other Files ----
 chromcost5.m and chromcost7.m are used for evaluating the cost of a topology for given values of k0,k1,k2,k4. They use all_shortest_paths from matlab_bgl, http://dgleich.github.com/matlab-bgl/

@@ -6,12 +6,13 @@ width =10;
 height = 10;
 node_population_param = 30;
 pop_distn = 'exp';
-% parameters for GA call
+% optimisation parameters
 parameters = struct();
 parameters.k0 = 10;
 parameters.k1 = 1;
 parameters.k2 = 3e-4;
 parameters.k4 = 50;
+% internal GA parameters
 parameters.num_nodes = num_nodes;
 parameters.width = width;
 parameters.height = height;
@@ -49,4 +50,4 @@ end
 parameters.demand = demand;
 parameters.node_distances = node_distances;
 
-topo11 = coldGA(parameters);
+topo = coldGA(parameters);
