@@ -1,10 +1,9 @@
-function topology = coldGA(parameters)
+function [topology,best_cost] = coldGA(parameters)
 % coldGA:
 % Runs a genetic algorithm to create a model of an Internet topology
 % Rhys Bowden Sep 2009
-% version 11 - first github version Feb 2011
-% requires matlab_bgl package for all_shortest_paths
-% http://dgleich.github.com/matlab-bgl/
+% version 12 - allows minimax optimisation over an ensemble of demand
+% matrices (modified Jan 2015, Paul Tune)
 %
 % topology = coldGA(parameters)
 % 
@@ -18,14 +17,14 @@ function topology = coldGA(parameters)
 %                       to node j.
 %   topology.node_distances. node_distances(i,j) = the distance between node i and
 %                       node j.
-%   topology.demand     matrix of the traffic demand between each pair of
+%   topology.demand     matrices of the traffic demands between each pair of
 %                       nodes
 %   topology.version    version of the generator used to generate this
 %                       topology.
 
-display(' --- topology generator 11 ---');
+display(' --- topology generator 12 ---');
 topology = struct();
-topology.version = [11 0]; % version 11.0 of the generator
+topology.version = [12 0]; % version 12.0 of the generator
 
 % ---- parameters ---- 
 % choose positive parameters (except k1 which can be zero, and k2 or k0)
@@ -41,11 +40,21 @@ node_population_param = parameters.node_population_param;
 num_chromosomes=parameters.num_chromosomes;
 % number of generations in the genetic algorithm
 num_generations=parameters.num_generations;
+% number of demand matrices to optimise over
+try
+    [~,~,num_demands]=size(parameters.demand);
+    fprintf('Optimising over %d demand matrices\n\n',num_demands);
+catch err
+    % set default if demands not specified
+    num_demands=1;
+    fprintf('Optimising over %d demand matrix\n\n',num_demands);
+end
+
 % optimisation constants
-k2 = parameters.k2;% bandwidth*length constant
-k1 = parameters.k1;% length constant
 k0 = parameters.k0;% existence constant
-k4 = parameters.k4; % multi-connection penalty %NEW to version 8
+k1 = parameters.k1;% length constant
+k2 = parameters.k2;% bandwidth*length constant
+k3 = parameters.k3; % multi-connection penalty %NEW to version 8
 % crossover parameters
 % we assign these to a and b later, in the crossover section
 crossovera=parameters.crossovera;
@@ -106,6 +115,8 @@ else
     % and a parameter proportional to traffic demand (gravity model)
     node_distances = zeros(num_nodes);
     demand=zeros(num_nodes);
+
+    % create a single demand matrix based on the gravity model
     for i=1:num_nodes
         for j=1:i-1
             distance_temp = sqrt((node_map(i,1)-node_map(j,1))^2+(node_map(i,2)-node_map(j,2))^2);
@@ -121,7 +132,7 @@ end % end of distance and demand setup
 % each potential link is assigned a number from 1 to n^2, in the same order
 % as the link lengths. This is for implicit minimum spanning tree for
 % disconnected networks.
-[distance_order ix] = sort(reshape(node_distances,[],1));
+[distance_order,ix] = sort(reshape(node_distances,[],1));
 distance_order=zeros(size(ix));
 for ind = 1:length(ix)
     distance_order(ix(ind))=ind;
@@ -135,7 +146,10 @@ distance_order = reshape(distance_order,num_nodes,num_nodes);
 % uniformly
 new_chromosomes = zeros(num_nodes,num_nodes,num_chromosomes);
 % seed with minimum spanning tree and fully connected graph.
-new_chromosomes(:,:,1) = full(mst(sparse(node_distances)));
+% new_chromosomes(:,:,1) = full(mst(sparse(node_distances)));
+min_span_tree = full(graphminspantree(sparse(node_distances))); % not symmetrical
+min_span_tree(min_span_tree > 0) = 1;   % algorithm outputs the distance, so need to convert to adjacency matrix
+new_chromosomes(:,:,1) = min_span_tree + min_span_tree';
 if(num_chromosomes>=2)
 new_chromosomes(:,:,2) = ones(size(node_distances))-eye(size(node_distances));
 end
@@ -160,8 +174,12 @@ end
 
 % ---------- find the initial costs --------------------
 new_chromosome_costs = zeros(1,num_chromosomes);
+% performing a minimax criterion by finding worst case cost out of all
+% demands given; here take max over all demand matrices
 for i=1:num_chromosomes
-    [new_chromosome_costs(i) chromosome_changed replacement] = chrom_cost7(new_chromosomes(:,:,i),node_distances,demand,[k0 k1 k2 k4],distance_order);
+    [new_chromosome_costs(i),chromosome_changed,replacement] = chrom_cost7alt(new_chromosomes(:,:,i),node_distances,demand,[k0 k1 k2 k3],distance_order);
+        
+    % need only change when costs change
     if(chromosome_changed)
         % if the chromosome is disconnected this will be the minimum
         % (link-length-wise) connected version of it
@@ -183,17 +201,18 @@ for generation = 1:num_generations
     fprintf('Generation: %2d  Min cost: %7g Max cost: %7g Mean cost: %7g Cost SD: %g \n',generation,min(chromosome_costs),max(chromosome_costs),mean(chromosome_costs),sqrt(var(chromosome_costs))); % display!
 
     % ---------- mutation and crossover ------------------
-    [temp ix] = sort(chromosome_costs,'ascend');
+    [temp,ix] = sort(chromosome_costs,'ascend');
     new_chromosomes(:,:,1:num_saved_chromosomes) = chromosomes(:,:,ix(1:num_saved_chromosomes));
     new_chromosome_costs(1:num_saved_chromosomes) = chromosome_costs(ix(1:num_saved_chromosomes));
-    % pick b at random, then choose the best a of them.
+    % pick b at random, then choose the best a of them (performing
+    % tournament selection with tournament size b)
     for i=(num_saved_chromosomes+1):num_chromosomes
         if(rand<parameters.crossover_rate)
             % --- CROSSOVER ----
             indices = (random_subset(num_chromosomes,crossoverb))'; % the b chosen indices
             subcosts = chromosome_costs(indices);
             % pick best a out of b random (for the crossover)
-            [temp sorted_indices] = sort(subcosts,'ascend');
+            [temp,sorted_indices] = sort(subcosts,'ascend');
             chosen_indices = indices(sorted_indices(1:crossovera)); % list of indices.
 
             % chosen chromosomes for crossover (a of them)
@@ -219,14 +238,14 @@ for generation = 1:num_generations
                 new_hubs = sum(new_chromosome)>1;
                 new_hubs(hub_removed)=0;
                 new_hubs = find(new_hubs);
-                [ctemp hub_link] = min(node_distances(new_hubs,hub_removed));
+                [ctemp,hub_link] = min(node_distances(new_hubs,hub_removed));
                 new_row = zeros(1,num_nodes);
                 new_row(new_hubs(hub_link))=1;
                 new_chromosome(hub_removed,:) = new_row;
                 new_chromosome(:,hub_removed) = new_row';
                 new_disconnected = find(sum(new_chromosome)==0);
                 if(length(new_hubs)>1)
-                    [ctemp new_attachments] = min(node_distances(new_hubs,new_disconnected));
+                    [ctemp,new_attachments] = min(node_distances(new_hubs,new_disconnected));
                 else
                     new_attachments = new_hubs*ones(1,length(new_disconnected));
                 end
@@ -257,7 +276,10 @@ for generation = 1:num_generations
     end % of all crossovers
     % ------- find the cost values for the new chromosomes -------
     for i=(num_saved_chromosomes+1):num_chromosomes
-        [new_chromosome_costs(i) chromosome_changed replacement] = chrom_cost7(new_chromosomes(:,:,i),node_distances,demand,[k0 k1 k2 k4],distance_order);
+        [new_chromosome_costs(i),chromosome_changed,replacement] = chrom_cost7alt(new_chromosomes(:,:,i),node_distances,demand,[k0 k1 k2 k3],distance_order);
+        
+
+        % need only change when costs change
         if(chromosome_changed)
             % if the chromosome is disconnected this will be the minimum
             % (link-length-wise) connected version of it
@@ -265,7 +287,10 @@ for generation = 1:num_generations
         end
     end
 end % of all generations
-[best_cost best_index]=min(new_chromosome_costs);
+
+
+% take minimum over all costs, based on worst case demand
+[best_cost,best_index]=min(new_chromosome_costs);
 best_chromosome = new_chromosomes(:,:,best_index);
 display(best_cost);
 
@@ -276,5 +301,5 @@ end
 topology.adjacency = best_chromosome;
 topology.node_distances = node_distances;
 topology.demand = demand;
-% also outputs topolgy.version. See top.
+% also outputs topology.version. See top.
 end
