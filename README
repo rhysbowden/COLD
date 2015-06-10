@@ -1,5 +1,7 @@
-Before you can use coldGA, you must install matlab_bgl: http://dgleich.github.com/matlab-bgl/ 
-(place it in your matlab path)
+Before you can use coldGA, make sure the following C source files are compiled via Mex: 
+1. calc_link_load.c: script to compute link capacities
+2. floyd_apsp.c: Floyd-Warshall algorithm
+Both were written by Yin Zhang (yzhang@cs.utexax.edu)
 
 --- Primary Files ----
 coldGA.m is the genetic algorithm that generates a PoP-level topology.
@@ -11,3 +13,5 @@ pops_to_routers_example.m runs PoPs_to_routers with the simplest choices of para
 
 --- Other Files ----
 chromcost5.m and chromcost7.m are used for evaluating the cost of a topology for given values of k0,k1,k2,k4. They use all_shortest_paths from matlab_bgl, http://dgleich.github.com/matlab-bgl/
+
+chromcost5alt.m and chromcost7alt.m are alternative versions of chromcost5.m and chromcost7.m that do not require matlab_bgl. They do, however, require the C source files above so it is essential they are compiled.
